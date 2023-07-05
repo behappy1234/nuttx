@@ -34,7 +34,6 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#ifdef CONFIG_MATH_CORDIC_USE_Q31
 
 /* q1.31 conversion */
 
@@ -42,7 +41,6 @@
 #  define q31tof(q31_val)   ((float)(q31_val) / (float)0x80000000)
 #  define b16toq31(b16_val) ((b16_val) * 0x8000)
 #  define q31tob16(q31_val) ((q31_val) / 0x8000)
-#endif
 
 /****************************************************************************
  * Public Types
