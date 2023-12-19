@@ -123,7 +123,7 @@ jobs:
 
     strategy:
       matrix:
-        boards: [arm-01, arm-02, arm-03, arm-04, arm-05, arm-06, arm-07, arm-08, arm-09, arm-10, arm-11, arm-12, arm-13, other, risc-v, sim-01, sim-02, xtensa, codechecker]
+        boards: [arm-01, arm-02, arm-03, arm-04, arm-05, arm-06, arm-07, arm-08, arm-09, arm-10, arm-11, arm-12, arm-13, other, risc-v, sim-01, sim-02, xtensa, codechecker, kerneltest]
 
     steps:
       - name: Download Source Artifact
@@ -163,6 +163,13 @@ jobs:
                 ./cibuild.sh -c -A -R --codechecker testlist/${{matrix.boards}}.dat
             else
                 ./cibuild.sh -c -A -R testlist/${{matrix.boards}}.dat
+            fi
+            if [ "${{matrix.boards}}" = "kerneltest" ]; then
+                pytest -m kerneltest ./testrun/script -B kerneltest -P ${{ ARTIFACTDIR }}/buildartifacts/sim/kerneltest -L ${{ ARTIFACTDIR }}/buildartifacts/sim/kerneltest/log -R sim
+            fi
+            if grep -q "FAILED" ${{ ARTIFACTDIR }}/buildartifacts/sim/kerneltest/log/kerneltest_*.log; then
+                echo "kernel test fail"
+                exit 1
             fi
 
       - uses: actions/upload-artifact@v3
