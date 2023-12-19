@@ -828,8 +828,9 @@ static void semphr_delete_wrapper(void *semphr)
 
 static int semphr_take_from_isr_wrapper(void *semphr, void *hptw)
 {
-  DEBUGPANIC();
-  return false;
+  *(int *)hptw = 0;
+
+  return esp_errno_trans(nxsem_trywait(semphr));
 }
 
 /****************************************************************************
@@ -921,10 +922,6 @@ static int semphr_take_wrapper(void *semphr, uint32_t block_time_ms)
   if (block_time_ms == OSI_FUNCS_TIME_BLOCKING)
     {
       ret = nxsem_wait(&bt_sem->sem);
-      if (ret)
-        {
-          wlerr("Failed to wait sem\n");
-        }
     }
   else
     {
@@ -936,6 +933,12 @@ static int semphr_take_wrapper(void *semphr, uint32_t block_time_ms)
         {
           ret = nxsem_trywait(&bt_sem->sem);
         }
+    }
+
+  if (ret)
+    {
+      wlerr("ERROR: Failed to wait sem in %lu ticks. Error=%d\n",
+            MSEC2TICK(block_time_ms), ret);
     }
 
   return esp_errno_trans(ret);
@@ -1104,8 +1107,7 @@ static int32_t esp_queue_send_generic(void *queue, void *item,
 
   if (ticks == OSI_FUNCS_TIME_BLOCKING || ticks == 0)
     {
-      /**
-       * BLE interrupt function will call this adapter function to send
+      /* BLE interrupt function will call this adapter function to send
        * message to message queue, so here we should call kernel API
        * instead of application API
        */
@@ -2210,7 +2212,7 @@ int esp32c3_bt_controller_disable(void)
 
   while (!btdm_power_state_active())
     {
-      usleep(1000); /* wait */
+      nxsig_usleep(1000); /* wait */
     }
 
   btdm_controller_disable();

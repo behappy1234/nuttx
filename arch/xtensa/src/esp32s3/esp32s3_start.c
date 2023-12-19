@@ -37,6 +37,8 @@
 #include "esp32s3_lowputc.h"
 #include "esp32s3_clockconfig.h"
 #include "esp32s3_region.h"
+#include "esp32s3_periph.h"
+#include "esp32s3_rtc.h"
 #include "esp32s3_spiram.h"
 #include "esp32s3_wdt.h"
 #ifdef CONFIG_BUILD_PROTECTED
@@ -168,7 +170,7 @@ uint32_t g_idlestack[IDLETHREAD_STACKWORDS]
  *
  ****************************************************************************/
 
-static void IRAM_ATTR configure_cpu_caches(void)
+noinstrument_function static void IRAM_ATTR configure_cpu_caches(void)
 {
   int s_instr_flash2spiram_off = 0;
   int s_rodata_flash2spiram_off = 0;
@@ -270,7 +272,7 @@ static void IRAM_ATTR disable_app_cpu(void)
  *
  ****************************************************************************/
 
-void noreturn_function IRAM_ATTR __esp32s3_start(void)
+noinstrument_function void noreturn_function IRAM_ATTR __esp32s3_start(void)
 {
   uint32_t sp;
 
@@ -321,9 +323,18 @@ void noreturn_function IRAM_ATTR __esp32s3_start(void)
 
   esp32s3_wdt_early_deinit();
 
+  /* Initialize RTC controller parameters */
+
+  esp32s3_rtc_init();
+  esp32s3_rtc_clk_set();
+
   /* Set CPU frequency configured in board.h */
 
   esp32s3_clockconfig();
+
+  /* Initialize peripherals parameters */
+
+  esp32s3_perip_clk_init();
 
 #ifndef CONFIG_SUPPRESS_UART_CONFIG
   /* Configure the UART so we can get debug output */
@@ -345,6 +356,7 @@ void noreturn_function IRAM_ATTR __esp32s3_start(void)
   esp32s3_spi_timing_set_pin_drive_strength();
 #endif
 
+  esp32s3_spi_timing_set_mspi_flash_tuning();
 #if defined(CONFIG_ESP32S3_SPIRAM_BOOT_INIT)
   if (esp_spiram_init() != OK)
     {
@@ -496,7 +508,7 @@ static int map_rom_segments(void)
  *
  ****************************************************************************/
 
-void IRAM_ATTR __start(void)
+noinstrument_function void IRAM_ATTR __start(void)
 {
 #ifdef CONFIG_ESP32S3_APP_FORMAT_MCUBOOT
   if (map_rom_segments() != 0)

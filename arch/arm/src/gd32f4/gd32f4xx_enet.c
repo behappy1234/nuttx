@@ -47,6 +47,7 @@
 #include <nuttx/wqueue.h>
 #include <nuttx/net/phy.h>
 #include <nuttx/net/mii.h>
+#include <nuttx/net/ip.h>
 #include <nuttx/net/netdev.h>
 
 #if defined(CONFIG_NET_PKT)
@@ -2242,11 +2243,9 @@ static int gd32_ifup(struct net_driver_s *dev)
   int ret;
 
 #ifdef CONFIG_NET_IPv4
-  ninfo("Bringing up: %d.%d.%d.%d\n",
-        (int)(dev->d_ipaddr & 0xff),
-        (int)((dev->d_ipaddr >> 8) & 0xff),
-        (int)((dev->d_ipaddr >> 16) & 0xff),
-        (int)(dev->d_ipaddr >> 24));
+  ninfo("Bringing up: %u.%u.%u.%u\n",
+        ip4_addr1(dev->d_ipaddr), ip4_addr2(dev->d_ipaddr),
+        ip4_addr3(dev->d_ipaddr), ip4_addr4(dev->d_ipaddr));
 #endif
 
   /* Configure the Ethernet interface for DMA operation. */
@@ -3357,7 +3356,7 @@ static inline void gd32_enet_gpio_config(struct gd32_enet_mac_s *priv)
    */
 
   gd32_gpio_config(GPIO_CKOUT0);
-  gd32_rcu_ckout0_config(BOARD_CFG_CKOUT0_SOURCE, BOARD_CFG_CKOUT0_DIV);
+  gd32_rcu_ckout0_config(BOARD_CFG_CKOUT0_SOURCE, BOARD_CFG_CKOUT0_DIVIDER);
 
 #  elif defined(CONFIG_GD32F4_RMII_CKOUT1)
   /* Configure CKOUT1 to drive the PHY.  Board logic must provide

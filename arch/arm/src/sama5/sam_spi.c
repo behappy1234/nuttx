@@ -302,7 +302,7 @@ static const struct spi_ops_s g_spi0ops =
   .setfrequency      = spi_setfrequency,
 #ifdef CONFIG_SPI_DELAY_CONTROL
   .setdelay          = spi_setdelay,
-#endif  
+#endif
   .setmode           = spi_setmode,
   .setbits           = spi_setbits,
 #ifdef CONFIG_SPI_HWFEATURES
@@ -1831,7 +1831,7 @@ struct spi_dev_s *sam_spibus_initialize(int port)
    * chip select structures.
    */
 
-  spics = (struct sam_spics_s *)kmm_zalloc(sizeof(struct sam_spics_s));
+  spics = kmm_zalloc(sizeof(struct sam_spics_s));
   if (!spics)
     {
       spierr("ERROR: Failed to allocate a chip select structure\n");

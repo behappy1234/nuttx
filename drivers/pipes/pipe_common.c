@@ -94,7 +94,7 @@ FAR struct pipe_dev_s *pipecommon_allocdev(size_t bufsize)
 
   /* Allocate a private structure to manage the pipe */
 
-  dev = (FAR struct pipe_dev_s *)kmm_malloc(sizeof(struct pipe_dev_s));
+  dev = kmm_malloc(sizeof(struct pipe_dev_s));
   if (dev)
     {
       /* Initialize the private structure */
@@ -713,7 +713,7 @@ int pipecommon_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
       eventset = 0;
       if ((filep->f_oflags & O_WROK) &&
-          nbytes <= (dev->d_bufsize - dev->d_polloutthrd))
+          nbytes < (dev->d_bufsize - dev->d_polloutthrd))
         {
           eventset |= POLLOUT;
         }
@@ -741,7 +741,7 @@ int pipecommon_poll(FAR struct file *filep, FAR struct pollfd *fds,
           eventset |= POLLERR;
         }
 
-      poll_notify(dev->d_fds, CONFIG_DEV_PIPE_NPOLLWAITERS, eventset);
+      poll_notify(&fds, 1, eventset);
     }
   else
     {
@@ -838,6 +838,16 @@ int pipecommon_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         }
         break;
 
+      case PIPEIOC_PEEK:
+        {
+          FAR struct pipe_peek_s *peek = (FAR struct pipe_peek_s *)arg;
+
+          DEBUGASSERT(peek && peek->buf);
+
+          ret = circbuf_peek(&dev->d_buffer, peek->buf, peek->size);
+        }
+        break;
+
       case FIONWRITE:  /* Number of bytes waiting in send queue */
       case FIONREAD:   /* Number of bytes available for reading */
         {
@@ -877,8 +887,8 @@ int pipecommon_unlink(FAR struct inode *inode)
 {
   FAR struct pipe_dev_s *dev;
 
-  DEBUGASSERT(inode && inode->i_private);
-  dev = (FAR struct pipe_dev_s *)inode->i_private;
+  DEBUGASSERT(inode->i_private);
+  dev = inode->i_private;
 
   /* Mark the pipe unlinked */
 

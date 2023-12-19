@@ -35,6 +35,7 @@
 #include <nuttx/fs/fs.h>
 #include <nuttx/init.h>
 #include <nuttx/symtab.h>
+#include <nuttx/trace.h>
 #include <nuttx/wqueue.h>
 #include <nuttx/kthread.h>
 #include <nuttx/userspace.h>
@@ -47,6 +48,7 @@
 #include "sched/sched.h"
 #include "wqueue/wqueue.h"
 #include "init/init.h"
+#include "misc/coredump.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -247,6 +249,11 @@ static inline void nx_start_application(void)
   board_late_initialize();
 #endif
 
+#if defined(CONFIG_BOARD_COREDUMP_SYSLOG) || \
+    defined(CONFIG_BOARD_COREDUMP_BLKDEV)
+  coredump_initialize();
+#endif
+
   posix_spawnattr_init(&attr);
   attr.priority  = CONFIG_INIT_PRIORITY;
   attr.stacksize = CONFIG_INIT_STACKSIZE;
@@ -406,6 +413,8 @@ static inline void nx_create_initthread(void)
 
 int nx_bringup(void)
 {
+  sched_trace_begin();
+
 #ifndef CONFIG_DISABLE_ENVIRON
   /* Setup up the initial environment for the idle task.  At present, this
    * may consist of only the initial PATH variable and/or and init library
@@ -454,5 +463,6 @@ int nx_bringup(void)
   clearenv();
 #endif
 
+  sched_trace_end();
   return OK;
 }

@@ -69,6 +69,10 @@ ifeq ($(CONFIG_STACK_USAGE),y)
   ARCHOPTIMIZATION += -fstack-usage
 endif
 
+ifneq ($(CONFIG_STACK_USAGE_WARNING),0)
+  ARCHOPTIMIZATION += -Wstack-usage=$(CONFIG_STACK_USAGE_WARNING)
+endif
+
 ifeq ($(CONFIG_ARCH_COVERAGE_ALL),y)
   ARCHOPTIMIZATION += -fprofile-generate -ftest-coverage
 endif
@@ -78,6 +82,15 @@ ARCHCXXFLAGS += -fno-common -nostdinc++
 
 ARCHCFLAGS += -Wall -Wstrict-prototypes -Wshadow -Wundef -Wno-attributes -Wno-unknown-pragmas
 ARCHCXXFLAGS += -Wall -Wshadow -Wundef -Wno-attributes -Wno-unknown-pragmas
+
+# When all C++ code is built using GCC 7.1 or a higher version,
+# we can safely disregard warnings of the type "parameter passing for X changed in GCC 7.1."
+# Refer to : https://stackoverflow.com/questions/48149323/what-does-the-gcc-warning-project-parameter-passing-for-x-changed-in-gcc-7-1-m
+
+ifneq ($(CONFIG_ARCH_TOOLCHAIN_CLANG),y)
+  ARCHCFLAGS += -Wno-psabi
+  ARCHCXXFLAGS += -Wno-psabi
+endif
 
 ifneq ($(CONFIG_CXX_STANDARD),)
   ARCHCXXFLAGS += -std=$(CONFIG_CXX_STANDARD)
@@ -120,12 +133,17 @@ endif
 
 ifeq ($(CONFIG_RISCV_TOOLCHAIN),GNU_RVG)
 
-  # Generic GNU RVG toolchain
+  # Generic GNU RVG toolchain, prefer to use riscv-none-elf-gcc from xPack
+  # if CROSSDEV is not defined.
 
-  ifeq ($(CONFIG_RISCV_TOOLCHAIN_GNU_RV32),y)
-    CROSSDEV ?= riscv32-unknown-elf-
+  ifeq ($(shell riscv-none-elf-gcc --version > /dev/null 2>&1; echo $$?), 0)
+    CROSSDEV ?= riscv-none-elf-
   else
-    CROSSDEV ?= riscv64-unknown-elf-
+    ifeq ($(CONFIG_RISCV_TOOLCHAIN_GNU_RV32),y)
+      CROSSDEV ?= riscv32-unknown-elf-
+    else
+      CROSSDEV ?= riscv64-unknown-elf-
+    endif
   endif
 
   # Detect cpu ISA support flags
@@ -165,12 +183,14 @@ ifeq ($(CONFIG_RISCV_TOOLCHAIN),GNU_RVG)
     ARCHTYPE = rv64
     ARCHABITYPE = lp64
     LLVM_ARCHTYPE := riscv64
+    # https://www.sifive.com/blog/all-aboard-part-4-risc-v-code-models
+    ARCHCPUFLAGS = -mcmodel=medany
   endif
 
   # Construct arch flags
 
   ARCHCPUEXTFLAGS = i$(ARCHRVISAM)$(ARCHRVISAA)$(ARCHRVISAF)$(ARCHRVISAD)$(ARCHRVISAC)$(ARCHRVISAZ)
-  ARCHCPUFLAGS = -march=$(ARCHTYPE)$(ARCHCPUEXTFLAGS)
+  ARCHCPUFLAGS += -march=$(ARCHTYPE)$(ARCHCPUEXTFLAGS)
 
   # Construct arch abi flags
 
@@ -215,12 +235,26 @@ ifeq ($(CONFIG_MM_KASAN_ALL),y)
   ARCHOPTIMIZATION += -fsanitize=kernel-address
 endif
 
+ifeq ($(CONFIG_MM_KASAN_DISABLE_READS_CHECK),y)
+  ARCHOPTIMIZATION += --param asan-instrument-reads=0
+endif
+
+ifeq ($(CONFIG_MM_KASAN_DISABLE_WRITES_CHECK),y)
+  ARCHOPTIMIZATION += --param asan-instrument-writes=0
+endif
+
 ifeq ($(CONFIG_MM_UBSAN_ALL),y)
   ARCHOPTIMIZATION += $(CONFIG_MM_UBSAN_OPTION)
 endif
 
 ifeq ($(CONFIG_MM_UBSAN_TRAP_ON_ERROR),y)
   ARCHOPTIMIZATION += -fsanitize-undefined-trap-on-error
+endif
+
+# Instrumentation options
+
+ifeq ($(CONFIG_ARCH_INSTRUMENT_ALL),y)
+  ARCHOPTIMIZATION += -finstrument-functions
 endif
 
 # Default toolchain

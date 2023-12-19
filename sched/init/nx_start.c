@@ -41,6 +41,7 @@
 #include <nuttx/kmalloc.h>
 #include <nuttx/pgalloc.h>
 #include <nuttx/sched_note.h>
+#include <nuttx/trace.h>
 #include <nuttx/binfmt/binfmt.h>
 #include <nuttx/drivers/drivers.h>
 #include <nuttx/init.h>
@@ -55,6 +56,7 @@
 #include "irq/irq.h"
 #include "group/group.h"
 #include "init/init.h"
+#include "instrument/instrument.h"
 #include "tls/tls.h"
 
 /****************************************************************************
@@ -278,9 +280,9 @@ static struct task_tcb_s g_idletcb[CONFIG_SMP_NCPUS];
 
 #if CONFIG_TASK_NAME_SIZE <= 0 || !defined(CONFIG_SMP)
 #  ifdef CONFIG_SMP
-static const char g_idlename[] = "CPU Idle";
+static const char g_idlename[] = "CPU_Idle";
 #  else
-static const char g_idlename[] = "Idle Task";
+static const char g_idlename[] = "Idle_Task";
 #  endif
 #endif
 
@@ -323,6 +325,8 @@ void nx_start(void)
 
   /* Initialize RTOS Data ***************************************************/
 
+  sched_trace_begin();
+
   /* Initialize the IDLE task TCB *******************************************/
 
   for (i = 0; i < CONFIG_SMP_NCPUS; i++)
@@ -364,9 +368,7 @@ void nx_start(void)
        */
 
 #ifdef CONFIG_SMP
-      g_idletcb[i].cmn.flags = (TCB_FLAG_TTYPE_KERNEL |
-                                TCB_FLAG_NONCANCELABLE |
-                                TCB_FLAG_CPU_LOCKED);
+      g_idletcb[i].cmn.flags = (TCB_FLAG_TTYPE_KERNEL | TCB_FLAG_CPU_LOCKED);
       g_idletcb[i].cmn.cpu   = i;
 
       /* Set the affinity mask to allow the thread to run on all CPUs.  No,
@@ -380,8 +382,7 @@ void nx_start(void)
       g_idletcb[i].cmn.affinity =
         (cpu_set_t)(CONFIG_SMP_DEFAULT_CPUSET & SCHED_ALL_CPUS);
 #else
-      g_idletcb[i].cmn.flags = (TCB_FLAG_TTYPE_KERNEL |
-                                TCB_FLAG_NONCANCELABLE);
+      g_idletcb[i].cmn.flags = TCB_FLAG_TTYPE_KERNEL;
 #endif
 
 #if CONFIG_TASK_NAME_SIZE > 0
@@ -564,6 +565,10 @@ void nx_start(void)
 
   sched_lock();
 
+  /* Initialize the instrument function */
+
+  instrument_initialize();
+
   /* Initialize the file system (needed to support device drivers) */
 
   fs_initialize();
@@ -649,7 +654,7 @@ void nx_start(void)
         {
           /* Clone stdout, stderr, stdin from the CPU0 IDLE task. */
 
-          DEBUGVERIFY(group_setuptaskfiles(&g_idletcb[i]));
+          DEBUGVERIFY(group_setuptaskfiles(&g_idletcb[i], NULL, true));
         }
       else
         {
@@ -658,7 +663,7 @@ void nx_start(void)
            * IDLE task.
            */
 
-          DEBUGVERIFY(group_setupidlefiles(&g_idletcb[i]));
+          DEBUGVERIFY(group_setupidlefiles());
         }
     }
 
@@ -691,6 +696,7 @@ void nx_start(void)
 
   /* Let other threads have access to the memory manager */
 
+  sched_trace_end();
   sched_unlock();
 
   /* The IDLE Loop **********************************************************/

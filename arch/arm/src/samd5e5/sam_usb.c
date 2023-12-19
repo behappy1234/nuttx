@@ -31,19 +31,19 @@
  *
  *   Device mode
  *   - Supports 8 IN endpoints and 8 OUT endpoints
- *   – No endpoint size limitations
- *   – Built-in DMA with multi-packet and dual bank for all endpoints
- *   – Supports feedback endpoint
- *   – Supports crystal less clock
+ *   - No endpoint size limitations
+ *   - Built-in DMA with multi-packet and dual bank for all endpoints
+ *   - Supports feedback endpoint
+ *   - Supports crystal less clock
  *
  *   Host mode
  *   - Supports 8 physical pipes
- *   – No pipe size limitations
- *   – Supports multiplexed virtual pipe on one physical pipe to allow an
+ *   - No pipe size limitations
+ *   - Supports multiplexed virtual pipe on one physical pipe to allow an
  *     unlimited USB tree
- *   – Built-in DMA with multi-packet support and dual bank for all pipes
- *   – Supports feedback endpoint
- *   – Supports the USB 2.0 Phase-locked SOFs feature
+ *   - Built-in DMA with multi-packet support and dual bank for all pipes
+ *   - Supports feedback endpoint
+ *   - Supports the USB 2.0 Phase-locked SOFs feature
  *
  ****************************************************************************/
 
@@ -392,9 +392,7 @@ enum sam_hoststate_e
   USB_HOSTSTATE_CONFIGURED     /* A valid configuration has been selected. */
 };
 
-/**
- * @brief      USB HCD pipe states
- */
+/* USB HCD pipe states */
 
 enum usb_h_pipe_state
 {
@@ -2316,7 +2314,7 @@ static struct usbdev_req_s *sam_ep_allocreq(struct usbdev_ep_s *ep)
 
   usbtrace(TRACE_EPALLOCREQ, USB_EPNO(ep->eplog));
 
-  privreq = (struct sam_req_s *)kmm_zalloc(sizeof(struct sam_req_s));
+  privreq = kmm_zalloc(sizeof(struct sam_req_s));
   if (!privreq)
     {
       usbtrace(TRACE_DEVERROR(SAM_TRACEERR_ALLOCFAIL), 0);
@@ -7138,7 +7136,7 @@ static int sam_alloc(struct usbhost_driver_s *drvr,
 
   /* There is no special memory requirement for the SAM. */
 
-  alloc = (uint8_t *)kmm_malloc(CONFIG_SAM_DESCSIZE);
+  alloc = kmm_malloc(CONFIG_SAM_DESCSIZE);
   if (!alloc)
     {
       return -ENOMEM;
@@ -7225,7 +7223,7 @@ static int sam_ioalloc(struct usbhost_driver_s *drvr,
 
   /* There is no special memory requirement */
 
-  alloc = (uint8_t *)kmm_malloc(buflen);
+  alloc = kmm_malloc(buflen);
   if (!alloc)
     {
       return -ENOMEM;

@@ -18,6 +18,7 @@
 #
 
 WD=`test -d ${0%/*} && cd ${0%/*}; pwd`
+CWD=`pwd`
 
 USAGE="USAGE: $0 [options] <board>:<config>+"
 ADVICE="Try '$0 --help' for more information"
@@ -150,13 +151,27 @@ for CONFIG in ${CONFIGS}; do
     BOARDSUBDIR=`echo ${CONFIG} | cut -d':' -f1`
   fi
 
-  BOARDDIR=boards/*/*/$BOARDSUBDIR
+  BOARDDIR=${CONFIG}
+  if [ ! -d $BOARDDIR ]; then
+    BOARDDIR="${CWD}/${BOARDDIR}"
+  fi
+
+  if [ -d $BOARDDIR ]; then
+    CONFIGSUBDIR=`basename ${CONFIG}`
+    BOARDDIR=$(dirname `dirname ${BOARDDIR}`)
+  else
+    BOARDDIR=boards/*/*/$BOARDSUBDIR
+  fi
+
   SCRIPTSDIR=$BOARDDIR/scripts
   MAKEDEFS1=$SCRIPTSDIR/Make.defs
 
   CONFIGDIR=$BOARDDIR/configs/$CONFIGSUBDIR
   DEFCONFIG=$CONFIGDIR/defconfig
   MAKEDEFS2=$CONFIGDIR/Make.defs
+
+  SCRIPTSDIR2=$BOARDDIR/../common/scripts
+  MAKEDEFS3=$SCRIPTSDIR2/Make.defs
 
   # Check the board configuration directory
 
@@ -181,8 +196,12 @@ for CONFIG in ${CONFIGS}; do
     if [ -r $MAKEDEFS1 ]; then
       MAKEDEFS=$MAKEDEFS1
     else
-      echo "No readable Make.defs file at $MAKEDEFS1 or $MAKEDEFS2"
-      exit 1
+      if [ -r $MAKEDEFS3 ]; then
+        MAKEDEFS=$MAKEDEFS3
+      else
+        echo "No readable Make.defs file at $MAKEDEFS1 or $MAKEDEFS2 or $MAKEDEFS3"
+        exit 1
+      fi
     fi
   fi
 

@@ -59,6 +59,10 @@
 
 #define MMU_IO_FLAGS            (PTE_R | PTE_W | PTE_G)
 
+/* Flags for kernel page tables */
+
+#define MMU_KPGT_FLAGS          (PTE_G)
+
 /* Kernel FLASH and RAM are mapped globally */
 
 #define MMU_KTEXT_FLAGS         (PTE_R | PTE_X | PTE_G)
@@ -363,7 +367,7 @@ static inline uintptr_t mmu_get_satp_pgbase(void)
  ****************************************************************************/
 
 void mmu_ln_setentry(uint32_t ptlevel, uintptr_t lnvaddr, uintptr_t paddr,
-                     uintptr_t vaddr, uint32_t mmuflags);
+                     uintptr_t vaddr, uint64_t mmuflags);
 
 /****************************************************************************
  * Name: mmu_ln_getentry
@@ -444,7 +448,7 @@ void mmu_ln_restore(uint32_t ptlevel, uintptr_t lnvaddr, uintptr_t vaddr,
  ****************************************************************************/
 
 void mmu_ln_map_region(uint32_t ptlevel, uintptr_t lnvaddr, uintptr_t paddr,
-                       uintptr_t vaddr, size_t size, uint32_t mmuflags);
+                       uintptr_t vaddr, size_t size, uint64_t mmuflags);
 
 /****************************************************************************
  * Name: mmu_ln_map_region

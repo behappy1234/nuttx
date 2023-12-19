@@ -101,6 +101,7 @@ static int nxsig_queue_action(FAR struct tcb_s *stcb, siginfo_t *info)
             }
 
           memcpy(&sigq->info, info, sizeof(siginfo_t));
+          sigq->info.si_user = sigact->act.sa_user;
 
           /* Put it at the end of the pending signals list */
 
@@ -170,7 +171,7 @@ static FAR sigpendq_t *nxsig_alloc_pendingsignal(void)
         {
           /* No... Allocate the pending signal */
 
-          sigpend = (FAR sigpendq_t *)kmm_malloc((sizeof (sigpendq_t)));
+          sigpend = kmm_malloc(sizeof(sigpendq_t));
 
           /* Check if we got an allocated message */
 
@@ -193,12 +194,19 @@ static FAR sigpendq_t *nxsig_alloc_pendingsignal(void)
  ****************************************************************************/
 
 static FAR sigpendq_t *
-  nxsig_find_pendingsignal(FAR struct task_group_s *group, int signo)
+nxsig_find_pendingsignal(FAR struct task_group_s *group, int signo)
 {
   FAR sigpendq_t *sigpend = NULL;
   irqstate_t flags;
 
   DEBUGASSERT(group != NULL);
+
+  /* Determining whether a signal is reliable or unreliable */
+
+  if (SIGRTMIN <= signo && signo <= SIGRTMAX)
+    {
+      return sigpend;
+    }
 
   /* Pending signals can be added from interrupt level. */
 

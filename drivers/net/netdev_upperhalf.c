@@ -270,7 +270,16 @@ static int netdev_upper_txpoll(FAR struct net_driver_s *dev)
 #endif
 
   pkt = netpkt_get(dev, NETPKT_TX);
-  ret = lower->ops->transmit(lower, pkt);
+
+  if (netpkt_getdatalen(lower, pkt) > NETDEV_PKTSIZE(dev))
+    {
+      nerr("ERROR: Packet too long to send!\n");
+      ret = -EMSGSIZE;
+    }
+  else
+    {
+      ret = lower->ops->transmit(lower, pkt);
+    }
 
   if (ret != OK)
     {
@@ -1054,14 +1063,11 @@ int netdev_lower_unregister(FAR struct netdev_lowerhalf_s *dev)
  * Input Parameters:
  *   dev - The lower half device driver structure
  *
- * Returned Value:
- *   0:Success; negated errno on failure
- *
  ****************************************************************************/
 
-int netdev_lower_carrier_on(FAR struct netdev_lowerhalf_s *dev)
+void netdev_lower_carrier_on(FAR struct netdev_lowerhalf_s *dev)
 {
-  return netdev_carrier_on(&dev->netdev);
+  netdev_carrier_on(&dev->netdev);
 }
 
 /****************************************************************************
@@ -1074,14 +1080,11 @@ int netdev_lower_carrier_on(FAR struct netdev_lowerhalf_s *dev)
  * Input Parameters:
  *   dev - The lower half device driver structure
  *
- * Returned Value:
- *   0:Success; negated errno on failure
- *
  ****************************************************************************/
 
-int netdev_lower_carrier_off(FAR struct netdev_lowerhalf_s *dev)
+void netdev_lower_carrier_off(FAR struct netdev_lowerhalf_s *dev)
 {
-  return netdev_carrier_off(&dev->netdev);
+  netdev_carrier_off(&dev->netdev);
 }
 
 /****************************************************************************
@@ -1290,12 +1293,17 @@ FAR uint8_t *netpkt_getbase(FAR netpkt_t *pkt)
  *   pkt    - The net packet
  *   len    - The length of data in netpkt
  *
+ * Returned Value:
+ *   The new effective data length, or a negated errno value on error.
+ *
  ****************************************************************************/
 
-void netpkt_setdatalen(FAR struct netdev_lowerhalf_s *dev,
-                       FAR netpkt_t *pkt, unsigned int len)
+int netpkt_setdatalen(FAR struct netdev_lowerhalf_s *dev,
+                      FAR netpkt_t *pkt, unsigned int len)
 {
-  iob_update_pktlen(pkt, len - NET_LL_HDRLEN(&dev->netdev));
+  uint8_t llhdrlen = NET_LL_HDRLEN(&dev->netdev);
+  int ret = iob_update_pktlen(pkt, len - llhdrlen, false);
+  return ret >= 0 ? ret + llhdrlen : ret;
 }
 
 /****************************************************************************
@@ -1353,4 +1361,43 @@ void netpkt_reset_reserved(FAR struct netdev_lowerhalf_s *dev,
 bool netpkt_is_fragmented(FAR netpkt_t *pkt)
 {
   return pkt->io_flink != NULL;
+}
+
+/****************************************************************************
+ * Name: netpkt_to_iov
+ *
+ * Description:
+ *   Write each piece of data/len into iov array.
+ *
+ * Input Parameters:
+ *   dev    - The lower half device driver structure
+ *   pkt    - The net packet
+ *   iov    - The iov array to write
+ *   iovcnt - The number of elements in the iov array
+ *
+ * Returned Value:
+ *   The actual written count of iov entries.
+ *
+ ****************************************************************************/
+
+int netpkt_to_iov(FAR struct netdev_lowerhalf_s *dev, FAR netpkt_t *pkt,
+                  FAR struct iovec *iov, int iovcnt)
+{
+  int i;
+
+  for (i = 0; pkt != NULL && i < iovcnt; pkt = pkt->io_flink, i++)
+    {
+      if (i == 0)
+        {
+          iov[i].iov_base = IOB_DATA(pkt) - NET_LL_HDRLEN(&dev->netdev);
+          iov[i].iov_len  = pkt->io_len   + NET_LL_HDRLEN(&dev->netdev);
+        }
+      else
+        {
+          iov[i].iov_base = IOB_DATA(pkt);
+          iov[i].iov_len  = pkt->io_len;
+        }
+    }
+
+  return i;
 }

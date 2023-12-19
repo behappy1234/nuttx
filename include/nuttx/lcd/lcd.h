@@ -264,6 +264,15 @@ struct lcd_dev_s
 
   int (*getareaalign)(FAR struct lcd_dev_s *dev,
                       FAR struct lcddev_area_align_s *align);
+
+  /* Passthrough unknown ioctl commands. */
+
+  int (*ioctl)(FAR struct lcd_dev_s *dev, int cmd, unsigned long arg);
+
+  /* open/close window. */
+
+  int (*open)(FAR struct lcd_dev_s *dev);
+  int (*close)(FAR struct lcd_dev_s *dev);
 };
 
 /****************************************************************************

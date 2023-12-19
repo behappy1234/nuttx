@@ -46,31 +46,6 @@
 #ifdef CONFIG_SCHED_TICKLESS
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/* In the original design, it was planned that nxsched_reassess_timer() be
- * called whenever there was a change at the head of the ready-to-run
- * list.  That call was intended to establish a new time-slice or to
- * stop an old time-slice timer.  However, it turns out that that
- * solution is too fragile:  The system is too vulnerable at the time
- * that the ready-to-run list is modified in order to muck with timers.
- *
- * The kludge/work-around is simple to keep the timer running all of the
- * time with an interval of no more than the timeslice interval.  If we
- * do this, then there is really no need to do anything when on context
- * switches.
- */
-
-#define KEEP_ALIVE_HACK 1
-
-#if CONFIG_RR_INTERVAL > 0
-#  define KEEP_ALIVE_TICKS MSEC2TICK(CONFIG_RR_INTERVAL)
-#else
-#  define KEEP_ALIVE_TICKS MSEC2TICK(80)
-#endif
-
-/****************************************************************************
  * Public Data
  ****************************************************************************/
 
@@ -271,15 +246,6 @@ static uint32_t nxsched_cpu_scheduler(int cpu, uint32_t ticks,
     }
 
   /* Returning zero means that there is no interesting event to be timed */
-
-#ifdef KEEP_ALIVE_HACK
-  if (ret == 0)
-    {
-      /* Apply the keep alive hack */
-
-      return KEEP_ALIVE_TICKS;
-    }
-#endif
 
   return ret;
 }
@@ -601,6 +567,16 @@ void nxsched_timer_expiration(void)
 {
   unsigned int elapsed;
   unsigned int nexttime;
+  irqstate_t flags;
+
+  /* If we are running on a single CPU architecture, then we know interrupts
+   * are disabled and there is no need to explicitly call
+   * enter_critical_section().  However, in the SMP case,
+   * enter_critical_section() is required prevent multiple cpu to enter
+   * oneshot_tick_start.
+   */
+
+  flags = enter_critical_section();
 
   /* Get the interval associated with last expiration */
 
@@ -617,6 +593,7 @@ void nxsched_timer_expiration(void)
 
   nexttime = nxsched_timer_process(elapsed, false);
   nxsched_timer_start(nexttime);
+  leave_critical_section(flags);
 }
 #endif
 

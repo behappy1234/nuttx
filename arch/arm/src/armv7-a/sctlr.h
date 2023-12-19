@@ -463,6 +463,7 @@ static inline unsigned int cp15_rdid(void)
 
 /* Get the Multiprocessor Affinity Register (MPIDR) */
 
+noinstrument_function
 static inline unsigned int cp15_rdmpidr(void)
 {
   return CP15_GET(MPIDR);
@@ -495,9 +496,29 @@ static inline unsigned int cp15_rdvbar(void)
   return CP15_GET(VBAR);
 }
 
+static inline unsigned int cp15_rdmvbar(void)
+{
+  return CP15_GET(MVBAR);
+}
+
+static inline unsigned int cp15_rdhvbar(void)
+{
+  return CP15_GET(HVBAR);
+}
+
 static inline void cp15_wrvbar(unsigned int vbar)
 {
   CP15_SET(VBAR, vbar);
+}
+
+static inline void cp15_wrhvbar(unsigned int vbar)
+{
+  CP15_SET(HVBAR, vbar);
+}
+
+static inline void cp15_wrmvbar(unsigned int vbar)
+{
+  CP15_SET(MVBAR, vbar);
 }
 
 /* Read/write the implementation defined Auxiliary Control Register (ACTLR) */

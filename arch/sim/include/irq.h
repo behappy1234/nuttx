@@ -118,6 +118,7 @@ int up_cpu_index(void);
 irqstate_t up_irq_flags(void);
 irqstate_t up_irq_save(void);
 void up_irq_restore(irqstate_t flags);
+void up_irq_enable(void);
 
 /****************************************************************************
  * Inline functions
@@ -145,6 +146,7 @@ static inline uintptr_t up_getsp(void)
  *
  ****************************************************************************/
 
+noinstrument_function
 static inline bool up_interrupt_context(void)
 {
 #ifdef CONFIG_SMP

@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <debug.h>
+#include <sys/time.h>
 
 #include <nuttx/net/netconfig.h>
 #include <nuttx/net/netdev.h>
@@ -118,16 +119,16 @@ static uint16_t udp_datahandler(FAR struct net_driver_s *dev,
 
       if (conn->domain == PF_INET6)
         {
-          FAR struct udp_hdr_s *udp   = UDPIPv6BUF;
-          FAR struct ipv6_hdr_s *ipv6 = IPv6BUF;
+          FAR struct udp_hdr_s *udp   = UDPIPv4BUF;
+          FAR struct ipv4_hdr_s *ipv4 = IPv4BUF;
           in_addr_t ipv4addr;
 
-          /* Encode the IPv4 address as an IPv-mapped IPv6 address */
+          /* Encode the IPv4 address as an IPv4-mapped IPv6 address */
 
           src_addr6.sin6_family = AF_INET6;
           src_addr6.sin6_port = udp->srcport;
 
-          ipv4addr = net_ip4addr_conv32(ipv6->srcipaddr);
+          ipv4addr = net_ip4addr_conv32(ipv4->srcipaddr);
           ip6_map_ipv4addr(ipv4addr, src_addr6.sin6_addr.s6_addr16);
 
           src_addr_size = sizeof(src_addr6);
@@ -153,10 +154,25 @@ static uint16_t udp_datahandler(FAR struct net_driver_s *dev,
 #endif /* CONFIG_NET_IPv4 */
 
   /* Copy the meta info into the I/O buffer chain, just before data.
-   * Layout: |datalen|ifindex|src_addr_size|src_addr|data|
+   * Layout: |datalen|ifindex|src_addr_size|src_addr|[timestamp]|data|
    */
 
   offset = (dev->d_appdata - iob->io_data) - iob->io_offset;
+
+#ifdef CONFIG_NET_TIMESTAMP
+  /* Store timestamp while packet is being queued.
+   * This is done unconditionally to avoid race condition when SO_TIMESTAMP
+   * gets enabled after packet is received but before it is read.
+   */
+
+  offset -= sizeof(struct timespec);
+  ret = iob_trycopyin(iob, (FAR const uint8_t *)&dev->d_rxtime,
+                      sizeof(struct timespec), offset, true);
+  if (ret < 0)
+    {
+      goto errout;
+    }
+#endif
 
   offset -= src_addr_size;
   ret = iob_trycopyin(iob, src_addr, src_addr_size, offset, true);
@@ -191,10 +207,10 @@ static uint16_t udp_datahandler(FAR struct net_driver_s *dev,
       goto errout;
     }
 
-  /* Trim l3/l4 offset, src_addr + 4Bytes should be less than header size. */
+  /* Reset new offset to point at start point. */
 
-  DEBUGASSERT(offset >= 0);
-  iob = iob_trimhead(iob, offset);
+  DEBUGASSERT(iob->io_offset + offset >= 0);
+  iob_reserve(iob, iob->io_offset + offset);
 
   /* Concat the iob to readahead */
 

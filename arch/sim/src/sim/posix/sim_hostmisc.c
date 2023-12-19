@@ -22,17 +22,28 @@
  * Included Files
  ****************************************************************************/
 
+#include <errno.h>
 #include <limits.h>
 #include <stdio.h>
+#include <spawn.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdarg.h>
+#include <sys/wait.h>
+#include <sys/types.h>
 
 #include "sim_internal.h"
 
 #ifdef CONFIG_HOST_MACOS
 #include <sys/syslimits.h>
 #include <mach-o/dyld.h>
+#endif
+
+#if defined __has_include
+#   if __has_include(<execinfo.h>)
+#      define SIM_GLIBC_PLATFORM 1
+#   endif
 #endif
 
 /****************************************************************************
@@ -47,8 +58,6 @@ void __gcov_dump(void);
  * Public Functions
  ****************************************************************************/
 
-extern uint64_t up_irq_save(void);
-extern void up_irq_restore(uint64_t flags);
 extern int backtrace(void **array, int size);
 
 /****************************************************************************
@@ -63,19 +72,15 @@ extern int backtrace(void **array, int size);
 
 void host_abort(int status)
 {
-  uint64_t flags = up_irq_save();
-
 #ifdef CONFIG_ARCH_COVERAGE
   /* Dump gcov data. */
 
-  __gcov_dump();
+  host_uninterruptible_no_return(__gcov_dump);
 #endif
 
   /* exit the simulation */
 
-  exit(status);
-
-  up_irq_restore(flags);
+  host_uninterruptible_no_return(exit, status);
 }
 
 /****************************************************************************
@@ -91,17 +96,62 @@ void host_abort(int status)
 
 int host_backtrace(void** array, int size)
 {
-#ifdef CONFIG_WINDOWS_CYGWIN
-  return 0;
+#ifdef SIM_GLIBC_PLATFORM
+  return host_uninterruptible(backtrace, array, size);
 #else
-  uint64_t flags = up_irq_save();
-  int ret;
-
-  ret = backtrace(array, size);
-
-  up_irq_restore(flags);
-  return ret;
+  return 0;
 #endif
+}
+
+/****************************************************************************
+ * Name: host_system
+ *
+ * Description:
+ *   Execute the command and get the result.
+ *
+ * Input Parameters:
+ *   buf - return massage, which return info will be stored
+ *   len - buf length
+ *   fmt - the format of parameters
+ *   ... - variable parameters.
+ *
+ * Returned Value:
+ *   A nonnegative integer is returned on success.  Otherwise,
+ *   a negated errno value is returned to indicate the nature of the failure.
+ ****************************************************************************/
+
+int host_system(char *buf, size_t len, const char *fmt, ...)
+{
+  FILE *fp;
+  int ret;
+  char cmd[512];
+  va_list vars;
+
+  va_start(vars, fmt);
+  ret = vsnprintf(cmd, sizeof(cmd), fmt, vars);
+  va_end(vars);
+  if (ret <= 0 || ret > sizeof(cmd))
+    {
+      return ret < 0 ? -errno : -EINVAL;
+    }
+
+  if (buf == NULL)
+    {
+      ret = host_uninterruptible(system, cmd);
+    }
+  else
+    {
+      fp = host_uninterruptible(popen, cmd, "r");
+      if (fp == NULL)
+        {
+          return -errno;
+        }
+
+      ret = host_uninterruptible(fread, buf, 1, len, fp);
+      host_uninterruptible(pclose, fp);
+    }
+
+  return ret < 0 ? -errno : ret;
 }
 
 /****************************************************************************
@@ -118,10 +168,10 @@ void host_init_cwd(void)
   /* Get the absolute path of the executable file */
 
 #  ifdef CONFIG_HOST_LINUX
-  len = readlink("/proc/self/exe", path, len);
+  len = host_uninterruptible(readlink, "/proc/self/exe", path, len);
   if (len < 0)
     {
-      perror("readlink  failed");
+      host_uninterruptible_no_return(perror, "readlink failed");
       return;
     }
 #  else
@@ -135,6 +185,42 @@ void host_init_cwd(void)
   path[len] = '\0';
   name = strrchr(path, '/');
   *++name = '\0';
-  chdir(path);
+  host_uninterruptible(chdir, path);
 }
 #endif
+
+/****************************************************************************
+ * Name: host_posix_spawn
+ ****************************************************************************/
+
+pid_t host_posix_spawn(const char *path,
+                       char *const argv[], char *const envp[])
+{
+  int ret;
+  pid_t pid;
+  char *default_argv[] =
+  {
+    NULL
+  };
+
+  if (!argv)
+    {
+      argv = default_argv;
+    }
+
+  ret = host_uninterruptible(posix_spawn, &pid, path,
+                             NULL, NULL, argv, envp);
+  return ret > 0 ? -ret : pid;
+}
+
+/****************************************************************************
+ * Name: host_wait
+ ****************************************************************************/
+
+int host_waitpid(pid_t pid)
+{
+  int status;
+
+  pid = host_uninterruptible(waitpid, pid, &status, 0);
+  return pid < 0 ? -errno : status;
+}

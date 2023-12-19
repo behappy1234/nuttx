@@ -3673,6 +3673,7 @@ static int efm32_usbinterrupt(int irq, void *context, void *arg)
           usbtrace(TRACE_INTDECODE(EFM32_TRACEINTID_SOF),
                   (uint16_t)regval);
           efm32_putreg(USB_GINTSTS_SOF, EFM32_USB_GINTSTS);
+          usbdev_sof_irq(&priv->usbdev, efm32_getframe(&priv->usbdev));
         }
 #endif
 
@@ -4328,7 +4329,7 @@ static struct usbdev_req_s *efm32_ep_allocreq(struct usbdev_ep_s *ep)
 
   usbtrace(TRACE_EPALLOCREQ, ((struct efm32_ep_s *)ep)->epphy);
 
-  privreq = (struct efm32_req_s *)kmm_malloc(sizeof(struct efm32_req_s));
+  privreq = kmm_malloc(sizeof(struct efm32_req_s));
   if (!privreq)
     {
       usbtrace(TRACE_DEVERROR(EFM32_TRACEERR_ALLOCFAIL), 0);

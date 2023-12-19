@@ -336,7 +336,7 @@ static void set_pte_block_desc(uint64_t *pte, uint64_t addr_pa,
       {
         /* Make Normal RW memory as execute never */
 
-        if ((attrs & MT_RW) || (attrs & MT_EXECUTE_NEVER))
+        if (attrs & MT_EXECUTE_NEVER)
           {
             desc |= PTE_BLOCK_DESC_PXN;
           }
@@ -426,7 +426,7 @@ static void init_xlat_tables(const struct arm_mmu_region *region)
   uint64_t level_size;
 
 #ifdef CONFIG_MMU_DEBUG
-  sinfo("mmap: virt %llx phys %llx size %llx\n", virt, phys, size);
+  sinfo("mmap: virt %lux phys %lux size %lux\n", virt, phys, size);
 #endif
 
   /* check minimum alignment requirement for given mmap region */
@@ -559,7 +559,7 @@ static void enable_mmu_el1(unsigned int flags)
  * Public Functions
  ***************************************************************************/
 
-int arm_mmu_set_memregion(const struct arm_mmu_region *region)
+int arm64_mmu_set_memregion(const struct arm_mmu_region *region)
 {
   uint64_t virt = region->base_va;
   uint64_t size = region->size;

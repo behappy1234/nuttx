@@ -30,6 +30,7 @@
 #include <debug.h>
 #include <assert.h>
 
+#include <sys/time.h>
 #include <nuttx/semaphore.h>
 #include <nuttx/net/net.h>
 #include <nuttx/mm/iob.h>
@@ -62,6 +63,19 @@ struct udp_recvfrom_s
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
+
+#ifdef CONFIG_NET_TIMESTAMP
+static void udp_store_cmsg_timestamp(FAR struct udp_recvfrom_s *pstate,
+                                     FAR struct timespec *timestamp)
+{
+  FAR struct msghdr *msg = pstate->ir_msg;
+  struct timeval tv;
+
+  TIMESPEC_TO_TIMEVAL(&tv, timestamp);
+  cmsg_append(msg, SOL_SOCKET, SO_TIMESTAMP,
+              &tv, sizeof(struct timeval));
+}
+#endif
 
 #ifdef CONFIG_NET_SOCKOPTS
 static void udp_recvpktinfo(FAR struct udp_recvfrom_s *pstate,
@@ -178,7 +192,7 @@ static inline void udp_readahead(struct udp_recvfrom_s *pstate)
 #endif
 
       /* Unflatten saved connection information
-       * Layout: |datalen|ifindex|src_addr_size|src_addr|data|
+       * Layout: |datalen|ifindex|src_addr_size|src_addr|[timestamp]|data|
        */
 
       recvlen = iob_copyout((FAR uint8_t *)&datalen, iob,
@@ -201,6 +215,22 @@ static inline void udp_readahead(struct udp_recvfrom_s *pstate)
       recvlen = iob_copyout(srcaddr, iob, src_addr_size, offset);
       offset += src_addr_size;
       DEBUGASSERT(recvlen == src_addr_size);
+
+#ifdef CONFIG_NET_TIMESTAMP
+      /* Unpack stored timestamp if SO_TIMESTAMP socket option is enabled */
+
+      if (conn->timestamp)
+        {
+          struct timespec timestamp;
+          recvlen = iob_copyout((FAR uint8_t *)&timestamp, iob,
+                                sizeof(struct timespec), offset);
+          DEBUGASSERT(recvlen == sizeof(struct timespec));
+
+          udp_store_cmsg_timestamp(pstate, &timestamp);
+        }
+
+      offset += sizeof(struct timespec);
+#endif
 
       /* Copy to user */
 
@@ -309,8 +339,8 @@ static inline void udp_sender(FAR struct net_driver_s *dev,
 
           FAR struct sockaddr_in6 *infrom6 =
             (FAR struct sockaddr_in6 *)srcaddr;
-          FAR struct udp_hdr_s *udp   = UDPIPv6BUF;
-          FAR struct ipv6_hdr_s *ipv6 = IPv6BUF;
+          FAR struct udp_hdr_s *udp   = UDPIPv4BUF;
+          FAR struct ipv4_hdr_s *ipv4 = IPv4BUF;
           in_addr_t ipv4addr;
 
           /* Encode the IPv4 address as an IPv4-mapped IPv6 address */
@@ -318,7 +348,7 @@ static inline void udp_sender(FAR struct net_driver_s *dev,
           infrom6->sin6_family = AF_INET6;
           infrom6->sin6_port = udp->srcport;
           fromlen  = sizeof(struct sockaddr_in6);
-          ipv4addr = net_ip4addr_conv32(ipv6->srcipaddr);
+          ipv4addr = net_ip4addr_conv32(ipv4->srcipaddr);
           ip6_map_ipv4addr(ipv4addr, infrom6->sin6_addr.s6_addr16);
         }
       else
@@ -434,6 +464,15 @@ static uint16_t udp_eventhandler(FAR struct net_driver_s *dev,
 
       else if ((flags & UDP_NEWDATA) != 0)
         {
+          /* Save packet timestamp, if requested */
+
+#ifdef CONFIG_NET_TIMESTAMP
+          if (pstate->ir_conn->timestamp)
+            {
+              udp_store_cmsg_timestamp(pstate, &dev->d_rxtime);
+            }
+#endif
+
           /* Save the sender's address in the caller's 'from' location */
 
           udp_sender(dev, pstate);

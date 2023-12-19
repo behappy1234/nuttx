@@ -41,10 +41,13 @@
 #include <nuttx/segger/rtt.h>
 #include <nuttx/sensors/sensor.h>
 #include <nuttx/serial/pty.h>
+#include <nuttx/serial/uart_ram.h>
 #include <nuttx/syslog/syslog.h>
 #include <nuttx/syslog/syslog_console.h>
+#include <nuttx/trace.h>
 #include <nuttx/usrsock/usrsock_rpmsg.h>
 #include <nuttx/virtio/virtio.h>
+#include <nuttx/drivers/optee.h>
 
 /****************************************************************************
  * Public Functions
@@ -65,6 +68,8 @@
 
 void drivers_initialize(void)
 {
+  drivers_trace_begin();
+
   /* Register devices */
 
   syslog_initialize();
@@ -113,6 +118,10 @@ void drivers_initialize(void)
 
 #ifdef CONFIG_RPMSG_UART
   rpmsg_serialinit();
+#endif
+
+#ifdef CONFIG_RAM_UART
+  ram_serialinit();
 #endif
 
   /* Initialize the console device driver (if it is other than the standard
@@ -208,4 +217,10 @@ void drivers_initialize(void)
 #ifdef CONFIG_DRIVERS_VIRTIO
   virtio_register_drivers();
 #endif
+
+#ifndef CONFIG_DEV_OPTEE_NONE
+  optee_register();
+#endif
+
+  drivers_trace_end();
 }

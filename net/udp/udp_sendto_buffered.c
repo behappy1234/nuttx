@@ -203,7 +203,9 @@ static inline void sendto_ipselect(FAR struct net_driver_s *dev,
 {
   /* Which domain the socket support */
 
-  if (conn->domain == PF_INET)
+  if (conn->domain == PF_INET ||
+      (conn->domain == PF_INET6 &&
+       ip6_is_ipv4addr((FAR struct in6_addr *)conn->u.ipv6.raddr)))
     {
       /* Select the IPv4 domain */
 
@@ -286,6 +288,16 @@ static int sendto_next_transfer(FAR struct udp_conn_s *conn)
       nwarn("WARNING: device is DOWN\n");
       return -EHOSTUNREACH;
     }
+
+#ifndef CONFIG_NET_IPFRAG
+  /* Sanity check if the packet len (with IP hdr) is greater than the MTU */
+
+  if (wrb->wb_iob->io_pktlen > devif_get_mtu(dev))
+    {
+      nerr("ERROR: Packet too long to send!\n");
+      return -EMSGSIZE;
+    }
+#endif
 
   /* If this is not the same device that we used in the last call to
    * udp_callback_alloc(), then we need to release and reallocate the old
@@ -539,7 +551,6 @@ ssize_t psock_udp_sendto(FAR struct socket *psock, FAR const void *buf,
   /* Get the underlying the UDP connection structure.  */
 
   conn = psock->s_conn;
-  DEBUGASSERT(conn);
 
   /* The length of a datagram to be up to 65,535 octets */
 
@@ -788,7 +799,7 @@ ssize_t psock_udp_sendto(FAR struct socket *psock, FAR const void *buf,
       udpiplen = udpip_hdrsize(conn);
 
       iob_reserve(wrb->wb_iob, CONFIG_NET_LL_GUARDSIZE);
-      iob_update_pktlen(wrb->wb_iob, udpiplen);
+      iob_update_pktlen(wrb->wb_iob, udpiplen, false);
 
       /* Copy the user data into the write buffer.  We cannot wait for
        * buffer space if the socket was opened non-blocking.

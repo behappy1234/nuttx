@@ -448,35 +448,11 @@ int nx_pthread_create(pthread_trampoline_t trampoline, FAR pthread_t *thread,
 #endif
     }
 
-#ifdef CONFIG_CANCELLATION_POINTS
-  /* Set the deferred cancellation type */
-
-  ptcb->cmn.flags |= TCB_FLAG_CANCEL_DEFERRED;
-#endif
-
   /* Get the assigned pid before we start the task (who knows what
    * could happen to ptcb after this!).
    */
 
   pid = ptcb->cmn.pid;
-
-  /* If the priority of the new pthread is lower than the priority of the
-   * parent thread, then starting the pthread could result in both the
-   * parent and the pthread to be blocked.  This is a recipe for priority
-   * inversion issues.
-   *
-   * We avoid this here by boosting the priority of the (inactive) pthread
-   * so it has the same priority as the parent thread.
-   */
-
-  if (ptcb->cmn.sched_priority < parent->sched_priority)
-    {
-      ret = nxsched_set_priority(&ptcb->cmn, parent->sched_priority);
-      if (ret < 0)
-        {
-          ret = -ret;
-        }
-    }
 
   /* Then activate the task */
 

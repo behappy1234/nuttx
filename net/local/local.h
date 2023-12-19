@@ -49,6 +49,8 @@
 #define LOCAL_NPOLLWAITERS 2
 #define LOCAL_NCONTROLFDS  4
 
+#define LOCAL_SEND_LIMIT   (CONFIG_DEV_FIFO_SIZE - sizeof(uint16_t))
+
 /****************************************************************************
  * Public Type Definitions
  ****************************************************************************/
@@ -122,6 +124,10 @@ struct local_conn_s
   char lc_path[UNIX_PATH_MAX];   /* Path assigned by bind() */
   int32_t lc_instance_id;        /* Connection instance ID for stream
                                   * server<->client connection pair */
+#ifdef CONFIG_NET_LOCAL_DGRAM
+  uint16_t pktlen;                 /* Read-ahead packet length */
+#endif /* CONFIG_NET_LOCAL_DGRAM */
+
   FAR struct local_conn_s *
                         lc_peer; /* Peer connection instance */
 #ifdef CONFIG_NET_LOCAL_SCM
@@ -218,6 +224,40 @@ FAR struct local_conn_s *local_alloc(void);
  ****************************************************************************/
 
 void local_free(FAR struct local_conn_s *conn);
+
+/****************************************************************************
+ * Name: local_addref
+ *
+ * Description:
+ *   Increment the reference count on the underlying connection structure.
+ *
+ * Input Parameters:
+ *   conn - Socket structure of the socket whose reference count will be
+ *           incremented.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void local_addref(FAR struct local_conn_s *conn);
+
+/****************************************************************************
+ * Name: local_subref
+ *
+ * Description:
+ *   Subtract the reference count on the underlying connection structure.
+ *
+ * Input Parameters:
+ *   conn - Socket structure of the socket whose reference count will be
+ *           incremented.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void local_subref(FAR struct local_conn_s *conn);
 
 /****************************************************************************
  * Name: local_nextconn

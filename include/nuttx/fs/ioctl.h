@@ -26,6 +26,7 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+#include <sys/types.h>
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -95,7 +96,9 @@
 #define _VIDIOCBASE     (0x3700) /* Video device ioctl commands */
 #define _CELLIOCBASE    (0x3800) /* Cellular device ioctl commands */
 #define _MIPIDSIBASE    (0x3900) /* Mipidsi device ioctl commands */
+#define _SEIOCBASE      (0x3a00) /* Secure element ioctl commands */
 #define _SYSLOGBASE     (0x3c00) /* Syslog device ioctl commands */
+#define _STEPIOBASE     (0x3d00) /* Stepper device ioctl commands */
 #define _WLIOCBASE      (0x8b00) /* Wireless modules ioctl network commands */
 
 /* boardctl() commands share the same number space */
@@ -304,6 +307,12 @@
                                            *      to return sector size.
                                            * OUT: Data return in user-provided
                                            *      buffer. */
+#define BIOC_BLKGETSIZE _BIOC(0x0010)     /* Get block device sector numbers.
+                                           * IN:  Pointer to writable instance
+                                           *      of sector numbers in which
+                                           *      to return sector numbers.
+                                           * OUT: Data return in user-provided
+                                           *      buffer. */
 
 /* NuttX MTD driver ioctl definitions ***************************************/
 
@@ -446,6 +455,10 @@
                                                *     more bytes than
                                                *     threshold.
                                                * OUT: None */
+
+#define PIPEIOC_PEEK        _PIPEIOC(0x0004)  /* Pipe peek interface
+                                               * IN: pipe_peek_s
+                                               * OUT: Length of data */
 
 /* RTC driver ioctl definitions *********************************************/
 
@@ -600,6 +613,11 @@
 #define _MTRIOCVALID(c)     (_IOC_TYPE(c) == _MTRIOBASE)
 #define _MTRIOC(nr)         _IOC(_MTRIOBASE, nr)
 
+/* Stepper drivers **********************************************************/
+
+#define _STEPIOCVALID(c)    (_IOC_TYPE(c) == _STEPIOBASE)
+#define _STEPIOC(nr)        _IOC(_STEPIOBASE, nr)
+
 /* MATH drivers *************************************************************/
 
 #define _MATHIOCVALID(c)    (_IOC_TYPE(c) == _MATHIOBASE)
@@ -640,6 +658,13 @@
 #define _MIPIDSIIOCVALID(c)    (_IOC_TYPE(c)==_MIPIDSIBASE)
 #define _MIPIDSIIOC(nr)        _IOC(_MIPIDSIBASE,nr)
 
+/* Secure element ioctl definitions *****************************************/
+
+/* (see nuttx/include/crypto/se05x.h */
+
+#define _SEIOCVALID(c)     (_IOC_TYPE(c)==_SEIOCBASE)
+#define _SEIOC(nr)         _IOC(_SEIOCBASE,nr)
+
 /* syslog driver ioctl definitions ******************************************/
 
 #define _SYSLOGVALID(c) (_IOC_TYPE(c)==_SYSLOGBASE)
@@ -660,6 +685,12 @@
 /****************************************************************************
  * Public Type Definitions
  ****************************************************************************/
+
+struct pipe_peek_s
+{
+  FAR void *buf;
+  size_t size;
+};
 
 /****************************************************************************
  * Public Data

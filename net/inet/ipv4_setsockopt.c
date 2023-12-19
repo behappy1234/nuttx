@@ -126,6 +126,7 @@ int ipv4_setsockopt(FAR struct socket *psock, int option,
         }
         break;
 
+#ifdef NET_UDP_HAVE_STACK
       case IP_ADD_MEMBERSHIP:         /* Join a multicast group */
       case IP_DROP_MEMBERSHIP:        /* Leave a multicast group */
         {
@@ -142,6 +143,8 @@ int ipv4_setsockopt(FAR struct socket *psock, int option,
             }
           else
             {
+              FAR struct udp_conn_s *conn = psock->s_conn;
+
               /* Use the default network device is imr_interface is
                * INADDRY_ANY.
                */
@@ -166,17 +169,33 @@ int ipv4_setsockopt(FAR struct socket *psock, int option,
                 }
               else if (option == IP_ADD_MEMBERSHIP)
                 {
-                  ret = igmp_joingroup(dev, &mrec->imr_multiaddr);
+                  if (conn->mreq.imr_multiaddr.s_addr != 0)
+                    {
+                      ret = -EADDRINUSE;
+                    }
+                  else
+                    {
+                      ret = igmp_joingroup(dev, &mrec->imr_multiaddr);
+                      if (ret == OK)
+                        {
+                          conn->mreq.imr_multiaddr = mrec->imr_multiaddr;
+                          conn->mreq.imr_ifindex   = dev->d_ifindex;
+                        }
+                    }
                 }
               else
                 {
                   ret = igmp_leavegroup(dev, &mrec->imr_multiaddr);
+                  if (ret == OK)
+                    {
+                      conn->mreq.imr_multiaddr.s_addr = 0;
+                      conn->mreq.imr_ifindex          = 0;
+                    }
                 }
             }
         }
         break;
 
-#ifdef NET_UDP_HAVE_STACK
       case IP_MULTICAST_TTL:          /* Set/read the time-to-live value of
                                        * outgoing multicast packets */
 #endif
@@ -208,10 +227,84 @@ int ipv4_setsockopt(FAR struct socket *psock, int option,
         }
         break;
 
-      /* The following IPv4 socket options are defined, but not implemented */
-
       case IP_MULTICAST_IF:           /* Set local device for a multicast
                                        * socket */
+#ifdef NET_UDP_HAVE_STACK
+        {
+          FAR struct udp_conn_s *conn;
+          FAR struct net_driver_s *dev;
+          struct ip_mreqn mreq;
+
+          conn = psock->s_conn;
+          if (value == NULL || value_len == 0)
+            {
+              ret = -EINVAL;
+              break;
+            }
+
+          if (value_len >= sizeof(struct ip_mreqn))
+            {
+              memcpy(&mreq, value, sizeof(mreq));
+            }
+          else
+            {
+              memset(&mreq, 0, sizeof(mreq));
+              if (value_len >= sizeof(struct ip_mreq))
+                {
+                  memcpy(&mreq, value, sizeof(struct ip_mreq));
+                }
+              else if (value_len >= sizeof(struct in_addr))
+                {
+                  memcpy(&mreq.imr_multiaddr,
+                         value, sizeof(struct in_addr));
+                }
+            }
+
+          if (!mreq.imr_ifindex)
+            {
+              if (net_ipv4addr_cmp(mreq.imr_multiaddr.s_addr, INADDR_ANY))
+                {
+                  conn->mreq.imr_interface.s_addr = 0;
+                  conn->mreq.imr_ifindex = 0;
+                  ret = OK;
+                  break;
+                }
+
+              dev = netdev_findby_lipv4addr(mreq.imr_multiaddr.s_addr);
+              if (dev)
+                {
+                  mreq.imr_ifindex = dev->d_ifindex;
+                }
+            }
+          else
+            {
+              dev = netdev_findbyindex(mreq.imr_ifindex);
+            }
+
+          if (!dev)
+            {
+              ret = -EADDRNOTAVAIL;
+              break;
+            }
+
+#ifdef CONFIG_NET_BINDTODEVICE
+          if (conn->sconn.s_boundto &&
+              mreq.imr_ifindex != conn->sconn.s_boundto)
+            {
+              ret = -EINVAL;
+              break;
+            }
+#endif
+
+          conn->mreq.imr_interface.s_addr = mreq.imr_multiaddr.s_addr;
+          conn->mreq.imr_ifindex = mreq.imr_ifindex;
+          ret = OK;
+          break;
+        }
+#endif
+
+      /* The following IPv4 socket options are defined, but not implemented */
+
       case IP_MULTICAST_LOOP:         /* Set/read boolean that determines
                                        * whether sent multicast packets
                                        * should be looped back to local

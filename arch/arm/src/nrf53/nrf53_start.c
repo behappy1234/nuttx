@@ -45,6 +45,7 @@
 #include "nrf53_cpunet.h"
 #include "nrf53_gpio.h"
 #include "nrf53_serial.h"
+#include "nrf53_spu.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -184,6 +185,12 @@ void __start(void)
 
   __asm__ __volatile__ ("\tcpsid  i\n");
 
+#ifdef HAVE_SPU_CONFIG
+  /* Configure SPU before cpunet boot */
+
+  nrf53_spu_configure();
+#endif
+
   /* Handle APPROTECT configuration */
 
   nrf53_approtect();
@@ -229,6 +236,10 @@ void __start(void)
 
   showprogress('C');
 
+#ifdef CONFIG_ARMV8M_STACKCHECK
+  arm_stack_check_init();
+#endif
+
 #ifdef CONFIG_ARCH_HAVE_FPU
   /* Initialize the FPU (if available) */
 
@@ -238,6 +249,10 @@ void __start(void)
 #ifdef CONFIG_NRF53_FLASH_PREFETCH
   nrf53_enable_icache(true);
   nrf53_enable_profile(true);
+#endif
+
+#ifdef CONFIG_ARCH_PERF_EVENTS
+  up_perf_init((void *)BOARD_SYSTICK_CLOCK);
 #endif
 
   showprogress('D');

@@ -40,7 +40,9 @@
 #include <nuttx/kmalloc.h>
 #include <nuttx/wdog.h>
 #include <nuttx/wqueue.h>
+#include <nuttx/net/ip.h>
 #include <nuttx/net/netdev.h>
+
 #if defined(CONFIG_NET_PKT)
 #  include <nuttx/net/pkt.h>
 #endif
@@ -285,10 +287,6 @@ static int wlan_ioctl(struct net_driver_s *dev, int cmd,
                       unsigned long arg);
 #endif
 
-#ifdef CONFIG_NET_ICMPv6
-static void wlan_ipv6multicast(struct wlan_priv_s *priv);
-#endif
-
 static struct wlan_pktbuf *wlan_recvframe(struct wlan_priv_s *priv);
 static struct wlan_pktbuf *wlan_txframe(struct wlan_priv_s *priv);
 static inline void wlan_free_buffer(struct wlan_priv_s *priv,
@@ -414,8 +412,7 @@ static inline struct wlan_pktbuf *wlan_alloc_buffer(struct wlan_priv_s *priv)
       return NULL;
     }
 
-  pktbuf = (struct wlan_pktbuf *)kmm_malloc(
-            sizeof(struct wlan_pktbuf) + WLAN_BUF_SIZE);
+  pktbuf = kmm_malloc(sizeof(struct wlan_pktbuf) + WLAN_BUF_SIZE);
 #else
   sq_entry_t *entry;
   irqstate_t flags = spin_lock_irqsave(&priv->lock);
@@ -886,8 +883,7 @@ static void wlan_rxpoll(void *arg)
         }
 
 #ifdef WLAN_RX_THRESHOLD
-      /**
-       * If received total bytes is larger than receive threshold,
+      /* If received total bytes is larger than receive threshold,
        * then do "unlock" to try to active applicantion to receive
        * data from low-level buffer of IP stack.
        */
@@ -1139,9 +1135,9 @@ static int wlan_ifup(struct net_driver_s *dev)
   struct wlan_priv_s *priv = (struct wlan_priv_s *)dev->d_private;
 
 #ifdef CONFIG_NET_IPv4
-  ninfo("Bringing up: %d.%d.%d.%d\n",
-        dev->d_ipaddr & 0xff, (dev->d_ipaddr >> 8) & 0xff,
-        (dev->d_ipaddr >> 16) & 0xff, dev->d_ipaddr >> 24);
+  ninfo("Bringing up: %u.%u.%u.%u\n",
+        ip4_addr1(dev->d_ipaddr), ip4_addr2(dev->d_ipaddr),
+        ip4_addr3(dev->d_ipaddr), ip4_addr4(dev->d_ipaddr));
 #endif
 #ifdef CONFIG_NET_IPv6
   ninfo("Bringing up: %04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x\n",
@@ -1157,13 +1153,6 @@ static int wlan_ifup(struct net_driver_s *dev)
       net_unlock();
       return OK;
     }
-
-#ifdef CONFIG_NET_ICMPv6
-
-  /* Set up IPv6 multicast address filtering */
-
-  wlan_ipv6multicast(priv);
-#endif
 
   wlan_init_buffer(priv);
   ret = priv->ops->start();
@@ -1341,76 +1330,6 @@ static int wlan_rmmac(struct net_driver_s *dev, const uint8_t *mac)
 #endif
 
 /****************************************************************************
- * Name: wlan_ipv6multicast
- *
- * Description:
- *   Configure the IPv6 multicast MAC address.
- *
- * Input Parameters:
- *   priv - A reference to the private driver state structure
- *
- * Returned Value:
- *   OK on success; Negated errno on failure.
- *
- ****************************************************************************/
-
-#ifdef CONFIG_NET_ICMPv6
-static void wlan_ipv6multicast(struct wlan_priv_s *priv)
-{
-  struct net_driver_s *dev;
-  uint16_t tmp16;
-  uint8_t mac[6];
-
-  /* For ICMPv6, we need to add the IPv6 multicast address
-   *
-   * For IPv6 multicast addresses, the Ethernet MAC is derived by
-   * the four low-order octets OR'ed with the MAC 33:33:00:00:00:00,
-   * so for example the IPv6 address FF02:DEAD:BEEF::1:3 would map
-   * to the Ethernet MAC address 33:33:00:01:00:03.
-   *
-   * NOTES:  This appears correct for the ICMPv6 Router Solicitation
-   * Message, but the ICMPv6 Neighbor Solicitation message seems to
-   * use 33:33:ff:01:00:03.
-   */
-
-  mac[0] = 0x33;
-  mac[1] = 0x33;
-
-  dev    = &priv->dev;
-  tmp16  = dev->d_ipv6addr[6];
-  mac[2] = 0xff;
-  mac[3] = tmp16 >> 8;
-
-  tmp16  = dev->d_ipv6addr[7];
-  mac[4] = tmp16 & 0xff;
-  mac[5] = tmp16 >> 8;
-
-  ninfo("IPv6 Multicast: %02x:%02x:%02x:%02x:%02x:%02x\n",
-        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-
-  wlan_addmac(dev, mac);
-
-#ifdef CONFIG_NET_ICMPv6_AUTOCONF
-  /* Add the IPv6 all link-local nodes Ethernet address.  This is the
-   * address that we expect to receive ICMPv6 Router Advertisement
-   * packets.
-   */
-
-  wlan_addmac(dev, g_ipv6_ethallnodes.ether_addr_octet);
-#endif /* CONFIG_NET_ICMPv6_AUTOCONF */
-
-#ifdef CONFIG_NET_ICMPv6_ROUTER
-  /* Add the IPv6 all link-local routers Ethernet address.  This is the
-   * address that we expect to receive ICMPv6 Router Solicitation
-   * packets.
-   */
-
-  wlan_addmac(dev, g_ipv6_ethallrouters.ether_addr_octet);
-#endif /* CONFIG_NET_ICMPv6_ROUTER */
-}
-#endif /* CONFIG_NET_ICMPv6 */
-
-/****************************************************************************
  * Name: wlan_ioctl
  *
  * Description:
@@ -1514,7 +1433,7 @@ static int wlan_ioctl(struct net_driver_s *dev,
             ret = ops->disconnect();
             if (ret < 0)
               {
-                nerr("ERROR: Failed to connect\n");
+                nerr("ERROR: Failed to disconnect\n");
                 break;
               }
           }
@@ -1594,7 +1513,7 @@ static int wlan_ioctl(struct net_driver_s *dev,
 
   return ret;
 }
-#endif  /* CONFIG_NETDEV_IOCTL */
+#endif /* CONFIG_NETDEV_IOCTL */
 
 /****************************************************************************
  * Name: esp32_net_initialize
@@ -1788,19 +1707,18 @@ static void wlan_softap_tx_done(uint8_t *data, uint16_t *len, bool status)
 #ifdef ESP32_WLAN_HAS_STA
 int esp32_wlan_sta_set_linkstatus(bool linkstatus)
 {
-  int ret = -EINVAL;
   struct wlan_priv_s *priv = &g_wlan_priv[ESP32_WLAN_STA_DEVNO];
 
   if (linkstatus)
     {
-      ret = netdev_carrier_on(&priv->dev);
+      netdev_carrier_on(&priv->dev);
     }
   else
     {
-      ret = netdev_carrier_off(&priv->dev);
+      netdev_carrier_off(&priv->dev);
     }
 
-  return ret;
+  return OK;
 }
 
 /****************************************************************************
@@ -1923,4 +1841,4 @@ int esp32_wlan_softap_initialize(void)
 }
 #endif /* ESP32_WLAN_HAS_SOFTAP */
 
-#endif  /* CONFIG_ESP32_WIFI */
+#endif /* CONFIG_ESP32_WIFI */
